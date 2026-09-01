@@ -1,0 +1,582 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Secure Gemini Journal</title>
+    <style>
+        * { font-family: "Open Sans", sans-serif; }
+textarea, input { font-family: inherit; }
+
+        *, *::before, *::after { box-sizing: border-box; }
+        body {
+            font-family: 'Inter', 'Segoe UI', Roboto, sans-serif;
+            color: #2b2b35; margin: 0; padding: 24px; min-height: 100vh;
+            display: flex; justify-content: center; align-items: center;
+            background: #fbfafc; position: relative; overflow-x: hidden;
+        }
+        body::before {
+            content: ""; position: fixed;
+            top: -15%; left: -15%; right: -15%; bottom: -15%; z-index: 0; pointer-events: none;
+            background: radial-gradient(32% 32% at 12% 18%, rgba(255,110,165,0.85), transparent 72%),
+                        radial-gradient(36% 36% at 88% 12%, rgba(90,165,255,0.85), transparent 72%),
+                        radial-gradient(34% 34% at 15% 88%, rgba(90,225,165,0.80), transparent 72%),
+                        radial-gradient(38% 38% at 90% 88%, rgba(170,120,255,0.80), transparent 72%),
+                        radial-gradient(46% 46% at 50% 45%, rgba(255,195,90,0.70), transparent 72%);
+            filter: blur(45px) saturate(135%);
+            animation: drift 24s ease-in-out infinite alternate;
+        }
+        @keyframes drift {
+            0% { transform: translate(0, 0) rotate(0deg) scale(1); }
+            100% { transform: translate(-3%, 2%) rotate(6deg) scale(1.04); }
+        }
+        .container {
+            position: relative; z-index: 1; background: rgba(255,255,255,0.35);
+            backdrop-filter: blur(20px) saturate(160%); border: 1px solid rgba(255,255,255,0.7);
+            padding: 32px; border-radius: 24px; width: 95vw; max-width: 720px;
+            box-shadow: 0 24px 60px -24px rgba(140,100,255,0.35); transition: max-width 0.4s ease;
+        }
+        .container.split-mode { max-width: 1200px; }
+        
+        /* Typography & Inputs */
+        h1 { font-size: 26px; font-weight: 800; display: flex; justify-content: space-between; align-items: center; }
+        .gradient-text {
+            background: linear-gradient(90deg, #ff6fa0, #9b6bff 55%, #3fa9ff);
+            background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+        }
+        .gear-icon { cursor: pointer; color: #666; font-size: 20px; transition: color 0.2s; }
+        .gear-icon:hover { color: #9b6bff; }
+        
+        input[type="text"], textarea {
+            width: 100%; padding: 14px 16px; border: 1px solid rgba(255,255,255,0.7);
+            border-radius: 14px; font-size: 15px; background: rgba(255,255,255,0.45);
+            outline: none; transition: 0.2s;
+        }
+        input[type="text"]:focus, textarea:focus { border-color: rgba(155,107,255,0.55); background: rgba(255,255,255,0.65); }
+        
+        button {
+            background: linear-gradient(135deg, #ff8fb3, #b18cff 55%, #5cb3ff);
+            color: white; border: none; padding: 12px 24px; font-size: 15px; font-weight: 700;
+            border-radius: 12px; cursor: pointer; transition: 0.2s;
+        }
+        button:hover { transform: translateY(-2px); filter: brightness(1.05); }
+
+        /* Workspace Grid Layout */
+        .workspace-grid { display: grid; grid-template-columns: 1fr; gap: 24px; min-height: 500px; }
+        .workspace-grid.split-active { grid-template-columns: 1fr 1fr; }
+        
+        .main-pane { display: flex; flex-direction: column; position: relative; }
+        .side-pane { display: none; flex-direction: column; background: rgba(255,255,255,0.4); border-radius: 16px; padding: 16px; border: 1px solid rgba(255,255,255,0.7); overflow-y: auto; max-height: 500px; }
+        
+        #journalSpace { flex-grow: 1; resize: none; margin-bottom: 20px; min-height: 350px; }
+        
+        /* Robot Icon */
+        .robot-btn {
+            position: absolute; bottom: 80px; right: 20px; background: white;
+            border-radius: 50%; width: 50px; height: 50px; display: flex; justify-content: center; align-items: center;
+            font-size: 24px; box-shadow: 0 4px 12px rgba(0,0,0,0.15); cursor: pointer; transition: 0.2s;
+        }
+        .robot-btn:hover { transform: scale(1.1); }
+        .robot-btn::after {
+            content: attr(data-tooltip); position: absolute; bottom: 60px; right: 0;
+            background: #2b2b35; color: white; padding: 6px 10px; border-radius: 6px;
+            font-size: 12px; white-space: nowrap; opacity: 0; pointer-events: none; transition: 0.2s;
+        }
+        .robot-btn:hover::after { opacity: 1; }
+
+        .journal-card {
+            background: rgba(255,255,255,0.6); padding: 15px; border-radius: 12px; margin-bottom: 15px;
+            cursor: pointer; border: 1px solid rgba(255,255,255,0.8); display: flex; justify-content: space-between;
+        }
+        .journal-card:hover { background: rgba(255,255,255,0.8); }
+
+        #chatBox { flex-grow: 1; overflow-y: auto; margin-bottom: 14px; padding-right: 10px; }
+    </style>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Open+Sans:ital,wght@0,300..800;1,300..800&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container" id="mainContainer">
+        
+        <!-- Step 1: Login -->
+        <div id="loginSection">
+            <h1 class="gradient-text">Gemini Journal</h1>
+            <p>Please sign in to access your journal.</p>
+            <button id="loginBtn">Sign in with Google</button>
+        </div>
+
+        <!-- Step 2: One-Time Personalization -->
+        <div id="setupSection" style="display: none;">
+            <h1 class="gradient-text">Welcome!</h1>
+            <input type="text" id="setupUserName" placeholder="What should we call you? (e.g., Shri)" style="margin-bottom: 14px;" />
+            <input type="text" id="setupAiName" placeholder="Name your A.I chatbot (e.g., Max)" style="margin-bottom: 18px;" />
+            <button id="saveSetupBtn" style="width: 100%;">Continue</button>
+        </div>
+
+        <!-- Step 3: Home Dashboard -->
+        <div id="homeSection" style="display: none;">
+            <h1>
+               <span class="gradient-text">Hey <span id="displayUserName"></span> :)</span>
+                <i class="fas fa-cog gear-icon" id="settingsBtn" title="Edit Names"></i>
+            </h1>
+            <div id="journalList"></div>
+            <button id="addJournalBtn" style="margin-top: 10px; background: transparent; color: #2b2b35; border: 2px dashed #9b6bff; width: 100%;">
+                <i class="fas fa-plus"></i> Add New Journal
+            </button>
+        </div>
+
+        <!-- Step 4: Workspace (Note & Split Views) -->
+        <div id="workspaceSection" style="display: none;">
+            <div style="display: flex; justify-content: space-between; align-items: center; width: 100%; margin-bottom: 15px;">
+    <!-- Left: Back Arrow + Editable Title -->
+    <div style="display: flex; align-items: center; gap: 10px;">
+        <i class="fas fa-arrow-left gear-icon" id="backBtn" title="Back to Home" style="cursor: pointer; font-size: 18px; color: #8a63d2;"></i>
+        <input type="text" id="journalTitleInput" placeholder="Name your journal..." autocomplete="off" style="font-size: 28px; font-weight: bold; border: none; outline: none; width: 100%; background: linear-gradient(90deg, #ff6fa0, #9b6bff 55%, #3fa9ff); background-clip: text; -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+    </div>
+
+    <!-- Right: Shrink Panel Arrow -->
+    <i class="fas fa-compress-arrows-alt" id="shrinkPanelBtn" style="cursor: pointer; font-size: 18px; color: #666; display: none;" title="Collapse Panel"></i>
+</div>
+
+            <div class="workspace-grid" id="appGrid">
+                
+                <!-- Left Main Pane (Typing Area) -->
+                <div class="main-pane">
+                    <textarea id="journalSpace" placeholder="Start typing..." autocomplete="off"></textarea>
+                    
+                    <div class="robot-btn" id="toggleChatBtn" data-tooltip="Get a response from A.I">🤖</div>
+                    
+                    <button id="weaveBtn" style="width: 100%; background: linear-gradient(135deg, #ff6fa0, #ff8fb3);">Let's weave it together</button>
+                </div>
+
+                <!-- Right Side Pane (Chat OR Insights) -->
+                <div class="side-pane" id="sidePanel">
+                    
+                    <!-- Chat Interface -->
+                    <div id="chatInterface" style="display: none; height: 100%; flex-direction: column;">
+                        <div id="chatBox"></div>
+                        <div style="display: flex; gap: 10px;">
+                            <input type="text" id="chatInput" placeholder="Type..." />
+                            <button id="sendChatBtn">Send</button>
+                        </div>
+                    </div>
+
+                    <!-- Summary Interface -->
+                    <div id="summaryInterface" style="display: none; flex-direction: column;">
+                        <div id="summaryOutput" style="line-height: 1.6; margin-bottom: 20px;"></div>
+                        <canvas id="moodChart" width="400" height="200"></canvas>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Firebase SDK -->
+    <script type="module">
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getAuth, signInWithPopup, GoogleAuthProvider, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+import { getFirestore, collection, getDocs, addDoc, updateDoc, doc, serverTimestamp, query, where, orderBy, deleteDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+
+const firebaseConfig = {
+               apiKey: "AIzaSyBwe6N02yiz08fYKsZ7smpAuNohRlA9frw",
+               authDomain: "gemini-journal-2026.firebaseapp.com",
+               projectId: "gemini-journal-2026",
+               storageBucket: "gemini-journal-2026.firebasestorage.app",
+               messagingSenderId: "183884956854",
+               appId: "1:183884956854:web:0d26d3050608b4d819d217",
+               measurementId: "G-8377QCH4V9"
+};
+
+        const app = initializeApp(firebaseConfig);
+        const db = getFirestore(app);
+        const auth = getAuth(app);
+        const provider = new GoogleAuthProvider();
+
+        let preferredUserName = "Shri";
+        let companionName = "A.I";
+        let sessionHistory = [];
+        let moodChart = null;
+        let userLocation = null;
+        let currentJournalId = null;
+
+        // UI Elements
+        const sections = {
+            login: document.getElementById('loginSection'),
+            setup: document.getElementById('setupSection'),
+            home: document.getElementById('homeSection'),
+            workspace: document.getElementById('workspaceSection')
+        };
+        const sidePanel = document.getElementById('sidePanel');
+        const appGrid = document.getElementById('appGrid');
+        const chatInterface = document.getElementById('chatInterface');
+        const summaryInterface = document.getElementById('summaryInterface');
+        const chatBox = document.getElementById('chatBox');
+        const journalSpace = document.getElementById('journalSpace');
+
+
+        function switchView(viewName) {
+            Object.values(sections).forEach(sec => sec.style.display = 'none');
+            sections[viewName].style.display = 'block';
+        }
+
+        function checkLocalNames() {
+            const uName = localStorage.getItem('userName');
+            const aName = localStorage.getItem('aiName');
+            if(uName && aName) {
+                preferredUserName = uName; companionName = aName;
+                document.getElementById('displayUserName').innerText = preferredUserName;
+                document.getElementById('toggleChatBtn').setAttribute('data-tooltip', `Get a response from ${companionName}`);
+                return true;
+            }
+            return false;
+        }
+
+        // Auth
+onAuthStateChanged(auth, (user) => {
+    if (user) {
+        loadJournals(); 
+        if(checkLocalNames()) switchView('home');
+        else switchView('setup');
+    } else {
+        switchView('login');
+    }
+});
+
+        document.getElementById('loginBtn').addEventListener('click', () => signInWithPopup(auth, provider));
+
+        // Setup Names
+        document.getElementById('saveSetupBtn').addEventListener('click', () => {
+            const uName = document.getElementById('setupUserName').value || "Shri";
+            const aName = document.getElementById('setupAiName').value || "A.I";
+            localStorage.setItem('userName', uName);
+            localStorage.setItem('aiName', aName);
+            checkLocalNames();
+            switchView('home');
+        });
+
+        // Gear Icon (Settings)
+        document.getElementById('settingsBtn').addEventListener('click', () => {
+            const newUName = prompt("Edit your name:", preferredUserName);
+            const newAName = prompt("Edit your A.I chatbot name:", companionName);
+            if (newUName) { localStorage.setItem('userName', newUName); preferredUserName = newUName; }
+            if (newAName) { localStorage.setItem('aiName', newAName); companionName = newAName; }
+            checkLocalNames();
+        });
+
+        // Home Actions
+        document.getElementById('addJournalBtn').addEventListener('click', () => {
+    currentJournalId = null; 
+    
+    document.getElementById('journalTitleInput').value = "";
+    document.getElementById('journalSpace').value = "";
+    
+    const chatContainer = document.getElementById('chatBox');
+    if (chatContainer) chatContainer.innerHTML = "";
+
+    document.getElementById('summaryOutput').innerHTML = "";
+if (typeof moodChart !== 'undefined' && moodChart !== null) { moodChart.destroy(); }
+    
+    document.getElementById('mainContainer').classList.remove('split-mode');
+    document.getElementById('appGrid').classList.remove('split-active');
+    document.getElementById('sidePanel').style.display = 'none';
+    
+    const shrinkBtn = document.getElementById('shrinkPanelBtn');
+    if (shrinkBtn) shrinkBtn.style.display = 'none';
+    
+    switchView('workspace');
+});
+        
+
+    document.getElementById('backBtn').addEventListener('click', async () => {
+    try {
+        const titleInput = document.getElementById('journalTitleInput');
+        const spaceInput = document.getElementById('journalSpace');
+        
+        if (titleInput && spaceInput) {
+            const titleText = titleInput.value.trim() || "Untitled Journal";
+            const contentText = spaceInput.value.trim();
+            
+            if (contentText !== "" || (titleText !== "" && titleText !== "Untitled Journal")) {
+                if (currentJournalId) {
+                    await updateDoc(doc(db, "journals", currentJournalId), {
+                        title: titleText,
+                        content: contentText,
+                        timestamp: serverTimestamp()
+                    });
+                } else {
+                    const docRef = await addDoc(collection(db, "journals"), {
+                        userId: auth.currentUser.uid,
+                        title: titleText,
+                        content: contentText,
+                        timestamp: serverTimestamp()
+                    });
+                    currentJournalId = docRef.id;
+                }
+                loadJournals(); 
+            }
+        }
+    } catch (e) {
+        console.error("Error saving: ", e);
+    } finally {
+        switchView('home'); 
+    }
+});
+
+document.getElementById('addJournalBtn').addEventListener('click', () => {
+    currentJournalId = null;
+    document.getElementById('journalTitleInput').value = "";
+    document.getElementById('journalSpace').value = "";
+    document.getElementById('summaryOutput').innerHTML = "";
+    if (typeof moodChart !== 'undefined' && moodChart !== null) { moodChart.destroy(); }
+    switchView('workspace');
+});
+
+document.getElementById('shrinkPanelBtn').addEventListener('click', () => {
+    document.getElementById('mainContainer').classList.remove('split-mode');
+    document.getElementById('appGrid').classList.remove('split-active');
+    document.getElementById('sidePanel').style.display = 'none';
+    document.getElementById('shrinkPanelBtn').style.display = 'none';
+});
+
+        // Split Views (Chat & Weave)
+        function openSplitView(mode) {
+            document.getElementById('mainContainer').classList.add('split-mode');
+            appGrid.classList.add('split-active');
+            sidePanel.style.display = 'flex';
+            document.getElementById('shrinkPanelBtn').style.display = 'block';
+            
+            if(mode === 'chat') {
+                chatInterface.style.display = 'flex';              
+const journalText = document.getElementById('journalSpace').value.trim(); 
+const chatContainer = document.getElementById('chatBox'); 
+
+if (chatContainer.innerHTML.trim() === "" && journalText !== "") {
+    
+    appendChat(localStorage.getItem('aiName') || "A.I", "Reading your journal...", false);
+
+    const systemPrompt = `The user just wrote this in their journal: "${journalText}". Give a short, empathetic opening response acknowledging their feelings before asking what they want to explore.`;
+
+     // API call to backend
+    auth.currentUser.getIdToken().then(token => {
+        fetch('/api/chat', { 
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Authorization': `Bearer ${token}`
+            },
+            body: JSON.stringify({ message: systemPrompt })
+        })
+        .then(response => response.json())
+        .then(data => {
+            chatContainer.innerHTML = ""; 
+            appendChat(localStorage.getItem('aiName') || "A.I", data.result || data.reply, false);
+        })
+        .catch(error => {
+            console.error("Error:", error);
+            chatContainer.innerHTML = ""; 
+            appendChat(localStorage.getItem('aiName') || "A.I", "Sorry, I had trouble reading that. Try saying hi!", false);
+        });
+    });
+}
+                summaryInterface.style.display = 'none';
+            } else {
+                chatInterface.style.display = 'none';
+                summaryInterface.style.display = 'flex';
+            }
+        }
+
+        document.getElementById('toggleChatBtn').addEventListener('click', () => openSplitView('chat'));
+
+        // Chat Logic
+        function appendChat(sender, text, isUser) {
+            const div = document.createElement('div');
+            div.style.margin = "8px 0"; div.style.textAlign = isUser ? "right" : "left";
+            const bg = isUser ? "#5cb3ff" : "#b18cff";
+            div.innerHTML = `<div style="font-size:11px; color:#666; margin-bottom:2px;">${sender}</div><span style="background:${bg}; color:white; padding:8px 12px; border-radius:12px; display:inline-block;">${text}</span>`;
+            chatBox.appendChild(div);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        document.getElementById('sendChatBtn').addEventListener('click', async () => {
+            const input = document.getElementById('chatInput');
+            const msg = input.value.trim();
+            if(!msg) return;
+            
+            appendChat(preferredUserName, msg, true);
+            input.value = "";
+
+            const chatContainer = document.getElementById('chatBox');
+const loadingMsg = document.createElement('div');
+loadingMsg.id = "aiLoadingIndicator";
+loadingMsg.style = "color: #a0a0a0; font-style: italic; font-size: 14px; margin-bottom: 10px;";
+loadingMsg.innerText = `${typeof companionName !== 'undefined' ? companionName : 'A.I.'} is thinking...`; 
+chatContainer.appendChild(loadingMsg);
+chatContainer.scrollTop = chatContainer.scrollHeight;
+            
+            const token = await auth.currentUser.getIdToken();
+            const res = await fetch('/api/chat', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ 
+                    message: msg, 
+                    history: sessionHistory,
+                    user_name: preferredUserName,
+                    ai_name: companionName,
+                    note_content: journalSpace.value
+                })
+            });
+            const data = await res.json();
+            const indicator = document.getElementById('aiLoadingIndicator');
+if (indicator) indicator.remove();
+            if(res.ok) {
+                appendChat(companionName, data.result, false);
+                sessionHistory.push({role: 'user', text: msg}, {role: 'assistant', text: data.result});
+            }
+        });
+
+        // Weave (Summary & Geotagging)
+        document.getElementById('weaveBtn').addEventListener('click', async () => {
+            openSplitView('summary');
+            document.getElementById('summaryOutput').innerText = `${companionName} is weaving it together...`;
+            if (typeof moodChart !== 'undefined' && moodChart !== null) { moodChart.destroy(); }
+            
+            // Get Geolocation
+            if ("geolocation" in navigator) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => { userLocation = { lat: position.coords.latitude, lng: position.coords.longitude }; },
+                    (error) => { console.log("Location skipped:", error); }
+                );
+            }
+
+            const token = await auth.currentUser.getIdToken();
+            let transcriptText = sessionHistory.map(m => `${m.role}: ${m.text}`).join('\n');
+            
+            const res = await fetch('/api/summarize', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${token}` },
+                body: JSON.stringify({ 
+                    transcript: transcriptText,
+                    note_content: journalSpace.value,
+                    location: userLocation,
+                    user_name: preferredUserName,
+                    ai_name: companionName
+                })
+            });
+            
+            const data = await res.json();
+            if(res.ok) {
+                document.getElementById('summaryOutput').innerHTML = marked.parse(data.result);
+                const ctx = document.getElementById('moodChart').getContext('2d');
+                if(moodChart) moodChart.destroy();
+                moodChart = new Chart(ctx, {
+                    type: 'bar',
+                    data: {
+                        labels: ['Stress', 'Clarity', 'Energy'],
+                        datasets: [{ label: 'Emotional Weather', data: [data.metrics.stress, data.metrics.clarity, data.metrics.energy], backgroundColor: ['#ff6fa0', '#3fa9ff', '#ffc35a'] }]
+                    },
+                    options: { 
+    scales: { y: { beginAtZero: true, max: 10 } },
+    plugins: { 
+        legend: { display: false },
+        title: {
+            display: true,
+            text: 'Your Emotional Weather Map',
+            color: '#2b2b35', 
+            font: {
+                size: 16,
+                family: "'Open Sans', sans-serif"
+            }
+        }
+    }
+}
+                });
+            }
+        });
+
+        async function loadJournals() {
+    const journalList = document.getElementById('journalList');
+    journalList.innerHTML = "Loading your memories..."; 
+    
+    try {
+        const q = query(collection(db, "journals"), where("userId", "==", auth.currentUser.uid), orderBy("timestamp", "desc"));
+        const querySnapshot = await getDocs(q);
+        
+        journalList.innerHTML = ""; 
+        
+        
+querySnapshot.forEach((docSnap) => {
+    const data = docSnap.data();
+    const entryDiv = document.createElement('div');
+    entryDiv.style = "display: flex; justify-content: space-between; align-items: center; padding: 12px; margin-bottom: 10px; background: transparent; border: 1px dashed #888; border-radius: 8px; font-size: 16px; font-weight: bold; color: #555;";   
+
+    const titleSpan = document.createElement('span');
+titleSpan.innerText = data.title || "Untitled Journal";
+titleSpan.style.flexGrow = "1";
+titleSpan.style.cursor = "pointer";
+titleSpan.style.fontSize = "18px";
+titleSpan.style.background = "linear-gradient(90deg, #9b6bff, #3fa9ff)";
+titleSpan.style.webkitBackgroundClip = "text";
+titleSpan.style.webkitTextFillColor = "transparent";
+    titleSpan.addEventListener('click', () => {
+    currentJournalId = docSnap.id;
+    document.getElementById('journalTitleInput').value = data.title || "";
+    document.getElementById('journalSpace').value = data.content || "";
+    
+    
+    const chatContainer = document.getElementById('chatBox');
+    if (chatContainer) chatContainer.innerHTML = "";
+    
+    document.getElementById('mainContainer').classList.remove('split-mode');
+    document.getElementById('appGrid').classList.remove('split-active');
+    document.getElementById('sidePanel').style.display = 'none';
+    
+    const shrinkBtn = document.getElementById('shrinkPanelBtn');
+    if (shrinkBtn) shrinkBtn.style.display = 'none';
+
+    switchView('workspace');
+});
+
+    // Delete Button
+    const deleteBtn = document.createElement('i');
+    deleteBtn.className = "fas fa-trash";
+    deleteBtn.style = "color: #ff4d4d; cursor: pointer; padding-left: 15px;";
+    deleteBtn.addEventListener('click', async (e) => {
+        e.stopPropagation(); 
+        if(confirm("Are you sure you want to delete this journal?")) {
+            await deleteDoc(doc(db, "journals", docSnap.id));
+            loadJournals(); 
+        }
+    });
+
+    entryDiv.appendChild(titleSpan);
+    entryDiv.appendChild(deleteBtn);
+    journalList.appendChild(entryDiv);
+});
+    } catch (error) {
+        console.error("Error loading journals:", error);
+        journalList.innerHTML = "Could not load past journals.";
+    }
+}
+
+// Send Chat Message with Enter
+document.getElementById('chatInput').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        document.getElementById('sendChatBtn').click();
+    }
+});
+
+document.getElementById('journalTitleInput').addEventListener('keydown', function(event) {
+    if (event.key === 'Enter') {
+        event.preventDefault();
+        document.getElementById('journalSpace').focus();
+    }
+});
+    </script>
+</body>
+</html>
