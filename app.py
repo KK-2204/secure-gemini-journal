@@ -1,7 +1,10 @@
 import os
-from dotenv import load_dotenv
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 import google.generativeai as genai
-load_dotenv()
 gemini_api_key = os.environ.get("GEMINI_API_KEY")
 genai.configure(api_key=gemini_api_key)
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-key.json"
