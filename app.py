@@ -4,10 +4,7 @@ try:
     load_dotenv()
 except ImportError:
     pass
-import google.generativeai as genai
-gemini_api_key = os.environ.get("GEMINI_API_KEY")
-genai.configure(api_key=gemini_api_key)
-os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "gcp-key.json"
+
 import json
 from flask import Flask, render_template, request, jsonify
 from functools import wraps
@@ -15,7 +12,14 @@ from google import genai
 import firebase_admin
 from firebase_admin import credentials, auth, firestore
 
-firebase_admin.initialize_app()
+client = genai.Client(api_key=os.environ.get("GEMINI_API_KEY"))
+
+if os.path.exists("gcp-key.json"):
+    cred = credentials.Certificate("gcp-key.json")
+    firebase_admin.initialize_app(cred)
+else:
+    firebase_admin.initialize_app()
+
 db = firestore.client()
 
 app = Flask(__name__)
